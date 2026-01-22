@@ -31,7 +31,9 @@ def main():
     all_ok &= check_import("pvporcupine")
     
     if not all_ok:
-        print("\n⚠ Some dependencies missing. Run: pip install -r requirements.txt")
+        print("\n⚠ Some dependencies missing.")
+        print("   If using virtual environment: source venv/bin/activate && pip install -r requirements.txt")
+        print("   Or run: bash setup.sh (creates venv and installs dependencies)")
         sys.exit(1)
     
     # Check audio devices

@@ -5,8 +5,11 @@ Simple interactive audio tests for Raspberry Pi devices.
 ## Quick Start
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Run setup script (creates venv and installs dependencies)
+bash setup.sh
+
+# Activate virtual environment
+source venv/bin/activate
 
 # Verify setup
 python setup_check.py
@@ -14,6 +17,8 @@ python setup_check.py
 # Run tests
 python test_audio.py
 ```
+
+**Note:** On Raspberry Pi (Debian), you must use a virtual environment due to externally-managed Python. The `setup.sh` script handles this automatically.
 
 ## Tests Included
 
