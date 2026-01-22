@@ -2,10 +2,16 @@
 """
 Interactive audio test walkthrough.
 Tests: recording, playback, wake word detection (Porcupine)
+
+Environment Variables:
+    ALSA_DEVICE - ALSA device for playback (default: plughw:0,0)
 """
 
 import sys
 import time
+import os
+import subprocess
+import tempfile
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
@@ -18,6 +24,10 @@ PICOVOICE_KEY = "cdrf4+EvCTDAqM3o7MQnZhrC9HyzIpgEtqqKKQ8jWzMDwT+tvtljZA=="
 SAMPLE_RATE = 16000  # Porcupine requires 16kHz
 RECORD_DURATION = 5  # seconds for test recording
 RECORDING_FILE = "test_recording.wav"
+
+# ALSA device for playback - use plughw to bypass broken ALSA chains
+# Override with ALSA_DEVICE env var if needed
+ALSA_PLAYBACK_DEVICE = os.environ.get("ALSA_DEVICE", "plughw:0,0")
 
 
 # ============================================================
@@ -79,6 +89,43 @@ def wait_for_enter(prompt: str = "Press ENTER to continue..."):
     input(f"\n{prompt}")
 
 
+def play_with_aplay(wav_path: str, device: str = None) -> bool:
+    """
+    Play audio using aplay with explicit ALSA device.
+    This bypasses potentially broken ALSA chains (dmix/softvol).
+    """
+    device = device or ALSA_PLAYBACK_DEVICE
+    try:
+        result = subprocess.run(
+            ["aplay", "-D", device, wav_path],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        return result.returncode == 0
+    except Exception as e:
+        print(f"    aplay error: {e}")
+        return False
+
+
+def play_tone_with_aplay(tone: np.ndarray, sample_rate: int, device: str = None) -> bool:
+    """
+    Generate tone and play via aplay.
+    Saves to temp WAV, plays, then cleans up.
+    """
+    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+        temp_path = f.name
+    
+    try:
+        sf.write(temp_path, tone, sample_rate, subtype='PCM_16')
+        return play_with_aplay(temp_path, device)
+    finally:
+        try:
+            os.unlink(temp_path)
+        except:
+            pass
+
+
 def step_record():
     """Step 1: Record audio from microphone."""
     print("\n" + "=" * 50)
@@ -115,16 +162,20 @@ def step_playback():
     print("STEP 2: Playback Test")
     print("=" * 50)
     print("\nWe will now play back what you just recorded.")
+    print(f"Using ALSA device: {ALSA_PLAYBACK_DEVICE}")
     
     wait_for_enter("Press ENTER to play recording...")
     
     print("\n🔊 Playing recording...")
     try:
-        data, sr = sf.read(RECORDING_FILE)
-        # Note: May show harmless callback cleanup warning with Python 3.13
-        sd.play(data, sr, blocking=True)
-        print("✓ Playback complete")
-        return True
+        # Use aplay with explicit device (bypasses broken ALSA chains)
+        success = play_with_aplay(RECORDING_FILE, ALSA_PLAYBACK_DEVICE)
+        if success:
+            print("✓ Playback complete")
+            return True
+        else:
+            print("✗ Playback failed (aplay returned error)")
+            return False
     except Exception as e:
         print(f"✗ Playback failed: {e}")
         return False
@@ -136,16 +187,21 @@ def step_play_music():
     print("STEP 3: Music Playback Test")
     print("=" * 50)
     print("\nWe will play a generated melodic sample.")
+    print(f"Using ALSA device: {ALSA_PLAYBACK_DEVICE}")
     
     wait_for_enter("Press ENTER to play music...")
     
     print("\n🎵 Playing music sample...")
     try:
         music = generate_music_sample(SAMPLE_RATE, duration=3.0)
-        # Note: May show harmless callback cleanup warning with Python 3.13
-        sd.play(music, SAMPLE_RATE, blocking=True)
-        print("✓ Music playback complete")
-        return True
+        # Use aplay with explicit device (bypasses broken ALSA chains)
+        success = play_tone_with_aplay(music, SAMPLE_RATE, ALSA_PLAYBACK_DEVICE)
+        if success:
+            print("✓ Music playback complete")
+            return True
+        else:
+            print("✗ Music playback failed (aplay returned error)")
+            return False
     except Exception as e:
         print(f"✗ Music playback failed: {e}")
         return False
@@ -224,11 +280,10 @@ def step_wake_word():
         stream.stop()
         
         if detected:
-            # Play success chime
+            # Play success chime via aplay (bypasses broken ALSA chains)
             print("   Playing success chime...")
             chime = generate_chime(SAMPLE_RATE)
-            # Note: May show harmless callback cleanup warning with Python 3.13
-            sd.play(chime, SAMPLE_RATE, blocking=True)
+            play_tone_with_aplay(chime, SAMPLE_RATE, ALSA_PLAYBACK_DEVICE)
             print("✓ Wake word test passed!")
             return True
         else:

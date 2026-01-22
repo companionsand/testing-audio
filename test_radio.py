@@ -6,6 +6,10 @@ Usage:
     python test_radio.py              # Play default station (Jazz)
     python test_radio.py 1            # Play station by number
     python test_radio.py --list       # List available stations
+    python test_radio.py --device X   # Use specific audio device
+
+Environment Variables:
+    AUDIO_DEVICE - Override default audio device (e.g., "alsa/plughw:CARD=ArrayUAC10,DEV=0")
 
 Press Ctrl+C to stop playback.
 """
@@ -15,6 +19,19 @@ import shutil
 import sys
 import signal
 import time
+import os
+
+# ============================================================
+# Audio Device Configuration
+# ============================================================
+# Default: use plughw for ReSpeaker (bypasses broken ALSA chains)
+# Set AUDIO_DEVICE env var to override, or use --device flag
+DEFAULT_AUDIO_DEVICE = "alsa/plughw:CARD=ArrayUAC10,DEV=0"
+
+
+def get_audio_device() -> str:
+    """Get audio device from env var or default."""
+    return os.environ.get("AUDIO_DEVICE", DEFAULT_AUDIO_DEVICE)
 
 # ============================================================
 # Reliable Radio Stations (verified working streams)
@@ -47,13 +64,14 @@ def list_stations():
     print("=" * 50)
 
 
-def play_station(index: int = 0):
+def play_station(index: int = 0, audio_device: str = None):
     """Play a radio station using mpv."""
     if index < 0 or index >= len(STATIONS):
         print(f"✗ Invalid station number. Use 1-{len(STATIONS)}")
         sys.exit(1)
     
     station = STATIONS[index]
+    device = audio_device or get_audio_device()
     
     print("\n" + "=" * 50)
     print("RADIO STREAM TEST")
@@ -61,19 +79,21 @@ def play_station(index: int = 0):
     print()
     print(f"  Station: {station['name']}")
     print(f"  URL: {station['url']}")
+    print(f"  Audio device: {device}")
     print()
     print("  Starting stream... (Press Ctrl+C to stop)")
     print()
     
-    # Start mpv with minimal output
+    # Start mpv with explicit audio device
     # --no-video: audio only
     # --really-quiet: suppress most output
-    # --no-terminal: don't use terminal controls
+    # --audio-device: force specific ALSA device (bypasses broken chains)
     process = subprocess.Popen(
         [
             "mpv",
             "--no-video",
             "--really-quiet",
+            f"--audio-device={device}",
             station["url"]
         ],
         stdout=subprocess.DEVNULL,
@@ -129,24 +149,36 @@ def main():
         sys.exit(1)
     
     # Parse arguments
-    if len(sys.argv) < 2:
-        # Default: play first station
-        play_station(0)
-        return
+    args = sys.argv[1:]
+    audio_device = None
+    station_index = 0
     
-    arg = sys.argv[1]
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        
+        if arg in ("--list", "-l"):
+            list_stations()
+            return
+        elif arg in ("--help", "-h"):
+            print(__doc__)
+            return
+        elif arg in ("--device", "-d"):
+            if i + 1 < len(args):
+                audio_device = args[i + 1]
+                i += 1
+            else:
+                print("✗ --device requires an argument")
+                sys.exit(1)
+        elif arg.isdigit():
+            station_index = int(arg) - 1
+        else:
+            print(f"Unknown argument: {arg}")
+            print("Use --help for usage")
+            sys.exit(1)
+        i += 1
     
-    if arg in ("--list", "-l"):
-        list_stations()
-    elif arg in ("--help", "-h"):
-        print(__doc__)
-    elif arg.isdigit():
-        # Station number (1-indexed for user, 0-indexed internally)
-        play_station(int(arg) - 1)
-    else:
-        print(f"Unknown argument: {arg}")
-        print("Use --help for usage")
-        sys.exit(1)
+    play_station(station_index, audio_device)
 
 
 if __name__ == "__main__":
