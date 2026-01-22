@@ -121,8 +121,8 @@ def step_playback():
     print("\n🔊 Playing recording...")
     try:
         data, sr = sf.read(RECORDING_FILE)
-        sd.play(data, sr)
-        sd.wait()
+        # Note: May show harmless callback cleanup warning with Python 3.13
+        sd.play(data, sr, blocking=True)
         print("✓ Playback complete")
         return True
     except Exception as e:
@@ -142,8 +142,8 @@ def step_play_music():
     print("\n🎵 Playing music sample...")
     try:
         music = generate_music_sample(SAMPLE_RATE, duration=3.0)
-        sd.play(music, SAMPLE_RATE)
-        sd.wait()
+        # Note: May show harmless callback cleanup warning with Python 3.13
+        sd.play(music, SAMPLE_RATE, blocking=True)
         print("✓ Music playback complete")
         return True
     except Exception as e:
@@ -227,8 +227,8 @@ def step_wake_word():
             # Play success chime
             print("   Playing success chime...")
             chime = generate_chime(SAMPLE_RATE)
-            sd.play(chime, SAMPLE_RATE)
-            sd.wait()
+            # Note: May show harmless callback cleanup warning with Python 3.13
+            sd.play(chime, SAMPLE_RATE, blocking=True)
             print("✓ Wake word test passed!")
             return True
         else:

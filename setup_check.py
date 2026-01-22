@@ -65,14 +65,15 @@ def main():
     # Quick audio test
     print("\n3. Quick audio sanity check...")
     import numpy as np
+    import warnings
     try:
         # Generate a very short test tone
         sr = 16000
         duration = 0.1
         t = np.linspace(0, duration, int(sr * duration), dtype=np.float32)
         tone = 0.3 * np.sin(2 * np.pi * 440 * t)
-        sd.play(tone, sr)
-        sd.wait()
+        # Note: May show harmless callback cleanup warning with Python 3.13
+        sd.play(tone, sr, blocking=True)
         print("  ✓ Audio output working (played short beep)")
     except Exception as e:
         print(f"  ✗ Audio output failed: {e}")
