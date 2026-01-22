@@ -36,7 +36,7 @@ except ImportError:
 # ============================================================
 # Configuration
 # ============================================================
-SAMPLE_RATE = 48000        # Match ReSpeaker native rate
+SAMPLE_RATE = 16000        # ReSpeaker native rate (16kHz works reliably)
 TONE_DURATION = 2.0        # seconds
 RECORD_DURATION = 3.0      # seconds (longer to capture full tone)
 TONE_AMPLITUDE = 0.8       # Volume of test tone
@@ -210,11 +210,46 @@ def analyze_recording(recording: np.ndarray, sample_rate: int, expected_freq: fl
 
 
 def record_audio(duration: float, sample_rate: int, channels: int = 1) -> np.ndarray:
-    """Record audio from default input device."""
-    frames = int(duration * sample_rate)
-    recording = sd.rec(frames, samplerate=sample_rate, channels=channels, dtype=np.float32)
-    sd.wait()
-    return recording
+    """
+    Record audio using arecord (more reliable than PortAudio on ReSpeaker).
+    Falls back to sounddevice if arecord fails.
+    """
+    # Try arecord first (bypasses PortAudio issues)
+    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+        temp_path = f.name
+    
+    try:
+        # Use plughw for capture to handle format conversion
+        cmd = [
+            "arecord",
+            "-D", "plughw:0,0",
+            "-f", "S16_LE",
+            "-r", str(sample_rate),
+            "-c", str(channels),
+            "-d", str(int(duration)),
+            temp_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=duration + 5)
+        
+        if result.returncode == 0 and os.path.exists(temp_path):
+            data, sr = sf.read(temp_path)
+            return data.astype(np.float32)
+    except Exception as e:
+        print(f"      arecord failed: {e}, trying sounddevice...")
+    finally:
+        try:
+            os.unlink(temp_path)
+        except:
+            pass
+    
+    # Fallback to sounddevice
+    try:
+        frames = int(duration * sample_rate)
+        recording = sd.rec(frames, samplerate=sample_rate, channels=channels, dtype=np.float32)
+        sd.wait()
+        return recording
+    except Exception as e:
+        raise RuntimeError(f"Both arecord and sounddevice failed: {e}")
 
 
 # ============================================================
